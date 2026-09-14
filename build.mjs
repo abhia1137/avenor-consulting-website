@@ -10,6 +10,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
+import hubs from "./hub-content.js";
 
 // The repository is the source directory. Generated files belong only in dist/.
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -73,10 +74,10 @@ const categoryNames = {
   legal: "Website information",
 };
 const categoryPaths = {
-  service: "/#services",
-  industry: "/#industries",
-  solution: "/#solutions",
-  insight: "/#insights",
+  service: "/services/",
+  industry: "/industries/",
+  solution: "/solutions/",
+  insight: "/insights/",
   company: "/company/about/",
   legal: "/privacy/",
 };
@@ -287,7 +288,20 @@ function documentHtml({
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  ${header}
+  ${header.replace(
+    /<a\b([^>]*?)href="([^"]+)"([^>]*)>/g,
+    (tag, before, href, after) => {
+      const current =
+        href === route
+          ? "page"
+          : href !== "/" && route.startsWith(href) && !href.includes("#")
+            ? "location"
+            : null;
+      return current
+        ? `<a${before}href="${href}"${after} aria-current="${current}">`
+        : tag;
+    },
+  )}
   ${body}
   ${footer}
 </body>
@@ -347,7 +361,7 @@ function detailHtml(slug, page, content) {
         <nav aria-label="On this page">
           ${sectionLinks}
         </nav>
-        <a class="text-link" href="/#contact">Prepare a project brief <span aria-hidden="true">↗</span></a>
+        <a class="text-link" href="/contact/">Prepare a project brief <span aria-hidden="true">↗</span></a>
       </aside>
       <article class="article-content" aria-label="${escapeHtml(page.title)}">
         ${sections}
@@ -355,7 +369,7 @@ function detailHtml(slug, page, content) {
     </div>
     <section class="detail-cta container" aria-labelledby="detail-cta-title">
       <div><p class="eyebrow">LET’S MOVE FORWARD</p><h2 id="detail-cta-title">Make your next move a clear one.</h2><p>Define the challenge, connect the priorities, and put your next step into words.</p></div>
-      <a class="button button-blue" href="/#contact">Prepare a project brief <span aria-hidden="true">↗</span></a>
+      <a class="button button-blue" href="/contact/">Prepare a project brief <span aria-hidden="true">↗</span></a>
     </section>
     <section class="related-section container" aria-labelledby="related-title">
       <p class="eyebrow">CONTINUE EXPLORING</p><h2 id="related-title">Connected thinking.</h2>
@@ -364,6 +378,71 @@ function detailHtml(slug, page, content) {
       </div>
     </section>
   </main>`,
+  });
+}
+
+function validateHubs(content) {
+  if (hubs.length !== 4 || new Set(hubs.map((hub) => hub.type)).size !== 4)
+    throw new Error(
+      "Expected one overview for each of the four content categories.",
+    );
+  for (const hub of hubs) {
+    if (hub.route !== categoryPaths[hub.type] || !imageNames.has(hub.image))
+      throw new Error(`Invalid overview route or image: ${hub.route}`);
+    for (const field of [
+      "label",
+      "title",
+      "intro",
+      "sectionTitle",
+      "sectionIntro",
+    ])
+      if (typeof hub[field] !== "string" || !hub[field].trim())
+        throw new Error(`Missing overview ${field}: ${hub.route}`);
+    const expected = Object.keys(content).filter(
+      (slug) => content[slug].type === hub.type,
+    );
+    const found = hub.entries.map((entry) => entry.slug);
+    if (
+      new Set(found).size !== expected.length ||
+      found.length !== expected.length ||
+      expected.some((slug) => !found.includes(slug))
+    )
+      throw new Error(`Overview must link each ${hub.type} exactly once.`);
+    for (const entry of hub.entries)
+      if (!entry.label?.trim() || !entry.summary?.trim())
+        throw new Error(`Incomplete overview card: ${entry.slug}`);
+  }
+}
+
+function hubHtml(hub, content) {
+  const cards = hub.entries
+    .map((entry, index) => {
+      const page = content[entry.slug];
+      return `<a class="hub-card" href="${routeFor(entry.slug, page)}">
+      <div class="hub-card-image"><img src="/assets/${page.image}.jpg" alt="" loading="lazy" width="1000" height="600"><span class="hub-card-number" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span></div>
+      <div class="hub-card-copy"><h3>${escapeHtml(entry.label)}</h3><p>${escapeHtml(entry.summary)}</p><span class="text-link">${hub.type === "insight" ? "Read perspective" : "Explore " + escapeHtml(hub.label.toLowerCase() === "industries" ? "industry" : hub.type)} <span aria-hidden="true">↗</span></span></div>
+    </a>`;
+    })
+    .join("\n");
+  return documentHtml({
+    title: `${hub.label} | Avenor Consulting`,
+    description: hub.intro,
+    route: hub.route,
+    image: hub.image,
+    body: `<main id="main">
+      <section class="detail-hero hub-hero" aria-labelledby="hub-title">
+        <img src="/assets/${hub.image}.jpg" alt="" aria-hidden="true" fetchpriority="high">
+        <div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">${escapeHtml(hub.label)}</span></nav>
+          <p class="eyebrow light">${escapeHtml(hub.label)}</p><h1 id="hub-title">${escapeHtml(hub.title)}</h1><p class="detail-intro">${escapeHtml(hub.intro)}</p>
+        </div>
+      </section>
+      <section class="section container" aria-labelledby="hub-directory-title">
+        <div class="section-heading"><h2 id="hub-directory-title">${escapeHtml(hub.sectionTitle)}</h2><p>${escapeHtml(hub.sectionIntro)}</p></div>
+        <div class="hub-grid hub-grid-${hub.type}">${cards}</div>
+      </section>
+      ${hub.type === "service" ? technologySection : ""}
+      <section class="detail-cta container" aria-labelledby="hub-cta-title"><div><p class="eyebrow">LET’S MOVE FORWARD</p><h2 id="hub-cta-title">Turn your priorities into a plan.</h2><p>Outline your challenge and prepare a clear starting point for your next project.</p></div><a class="button button-blue" href="/contact/">Prepare a project brief <span aria-hidden="true">↗</span></a></section>
+    </main>`,
   });
 }
 
@@ -412,6 +491,11 @@ async function validateOutput(pages) {
       problems.push(`${route}: missing page title`);
     if (!/<link\b[^>]*rel="canonical"/i.test(html))
       problems.push(`${route}: missing canonical URL`);
+    const pageHeader = html.match(/<header\b[\s\S]*?<\/header>/i)?.[0] || "";
+    if (attributes(pageHeader, ["href"]).some((href) => href.startsWith("/#")))
+      problems.push(
+        `${route}: primary navigation must open dedicated pages, not homepage fragments`,
+      );
   }
   let checkedReferences = 0;
   function inspectReference(reference, sourceRoute) {
@@ -471,6 +555,7 @@ async function validateOutput(pages) {
     inspectReference(match[1] ?? match[2] ?? match[3], "/styles.css");
   if (
     allFiles.has("content.js") ||
+    allFiles.has("hub-content.js") ||
     allFiles.has("build.mjs") ||
     allFiles.has("package.json")
   )
@@ -486,9 +571,19 @@ const sourceHtml = await readFile(path.join(root, "index.html"), "utf8");
 const header = sourceHtml.match(/<header\b[\s\S]*?<\/header>/i)?.[0];
 const footer = sourceHtml.match(/<footer\b[\s\S]*?<\/footer>/i)?.[0];
 const homeMain = sourceHtml.match(/<main\b[\s\S]*?<\/main>/i)?.[0];
+const contactSection = sourceHtml.match(
+  /<section\b[^>]*id="contact"[\s\S]*?<\/section>/i,
+)?.[0];
+const technologySection = sourceHtml.match(
+  /<section\b[^>]*id="technologies"[\s\S]*?<\/section>/i,
+)?.[0];
 if (!header || !footer || !homeMain)
   throw new Error(
     "index.html must contain a complete header, main and footer.",
+  );
+if (!contactSection || !technologySection)
+  throw new Error(
+    "Homepage must include the shared contact and technology sections.",
   );
 const sandbox = { window: {} };
 vm.createContext(sandbox);
@@ -499,6 +594,7 @@ vm.runInContext(
 );
 const content = sandbox.window.AVENOR_CONTENT;
 validateContent(content);
+validateHubs(content);
 // Check inputs before replacing the previous generated build.
 for (const file of [
   "styles.css",
@@ -534,6 +630,30 @@ const home = documentHtml({
 });
 pages.set("/", home);
 await save("index.html", home);
+for (const hub of hubs) {
+  const html = hubHtml(hub, content);
+  pages.set(hub.route, html);
+  await save(`${hub.route.slice(1)}index.html`, html);
+}
+const contact = documentHtml({
+  title: "Contact & project planning | Avenor Consulting",
+  description:
+    "Outline your technology priorities and prepare a project brief you can review, copy or download. Your information stays in your browser.",
+  route: "/contact/",
+  body: `<main id="main" class="contact-page">${contactSection
+    .replace(
+      '<div class="contact-intro">',
+      '<div class="contact-intro"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">Contact</span></nav>',
+    )
+    .replace(/<h2>/, "<h1>")
+    .replace(/<\/h2>/, "</h1>")
+    .replace('<h3 class="form-title">', '<h2 class="form-title">')
+    .replace(/<\/h3>/, "</h2>")
+    .replace('<h4 class="brief-title">', '<h3 class="brief-title">')
+    .replace(/<\/h4>/, "</h3>")}</main>`,
+});
+pages.set("/contact/", contact);
+await save("contact/index.html", contact);
 for (const [slug, page] of Object.entries(content)) {
   const route = routeFor(slug, page);
   const html = detailHtml(slug, page, content);
@@ -546,7 +666,7 @@ const notFound = documentHtml({
     "Find your way back to Avenor services, industry perspectives and project planning.",
   route: "/404.html",
   noindex: true,
-  body: `<main id="main"><section class="section container not-found"><p class="eyebrow">404 / PAGE NOT FOUND</p><h1>Let’s get you moving<br>in the right direction.</h1><p>This page may have moved, or the address may be incomplete. Explore our expertise or return to the homepage.</p><div class="hero-actions"><a class="button button-blue" href="/">Back to Avenor <span aria-hidden="true">↗</span></a><a class="text-link" href="/#services">Explore services <span aria-hidden="true">→</span></a></div></section></main>`,
+  body: `<main id="main"><section class="section container not-found"><p class="eyebrow">404 / PAGE NOT FOUND</p><h1>Let’s get you moving<br>in the right direction.</h1><p>This page may have moved, or the address may be incomplete. Explore our expertise or return to the homepage.</p><div class="hero-actions"><a class="button button-blue" href="/">Back to Avenor <span aria-hidden="true">↗</span></a><a class="text-link" href="/services/">Explore services <span aria-hidden="true">→</span></a></div></section></main>`,
 });
 pages.set("/404.html", notFound);
 await save("404.html", notFound);
@@ -563,6 +683,6 @@ await save(
 );
 const validation = await validateOutput(pages);
 console.log(
-  `${checkMode ? "Checked" : "Built"} ${pages.size} HTML pages (${Object.keys(content).length} detail pages), ${validation.files} output files, and ${validation.checkedReferences} local references. No missing routes, assets or anchors.`,
+  `${checkMode ? "Checked" : "Built"} ${pages.size} HTML pages (${hubs.length} overviews, a contact page and ${Object.keys(content).length} detail pages), ${validation.files} output files, and ${validation.checkedReferences} local references. No missing routes, assets or anchors.`,
 );
 console.log(`Static output: ${out}`);

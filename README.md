@@ -1,6 +1,8 @@
 # Avenor Consulting Website
 
-An enterprise consulting website with a responsive homepage and 19 fully rendered detail pages: seven services, four industries, three illustrative solution blueprints, three perspectives, About and Privacy. All page content is present in the generated HTML and remains readable without JavaScript.
+An enterprise consulting website with 25 fully rendered content pages: a responsive homepage, four overview pages, a standalone contact page and 19 detail pages (seven services, four industries, three illustrative solution blueprints, three perspectives, About and Privacy). All page content is present in the generated HTML and remains readable without JavaScript.
+
+Primary navigation opens dedicated URLs: `/services/`, `/industries/`, `/solutions/`, `/insights/`, `/company/about/` and `/contact/`. Overview cards open the corresponding detail pages, and detail breadcrumbs return to their overview. The homepage retains its sections for browsing and existing bookmarked fragments; primary navigation no longer jumps to those sections.
 
 ## Build and check
 
@@ -11,7 +13,7 @@ npm run build
 npm test
 ```
 
-Both commands generate `dist/` and validate local HTML links, image and script references, stylesheet resources, fragment anchors, page titles and unique HTML IDs. A missing route, asset or anchor fails the build. The output includes `sitemap.xml`, `robots.txt` and a helpful `404.html`.
+Both commands generate `dist/` and validate local HTML links, image and script references, stylesheet resources, fragment anchors, page titles and unique HTML IDs. Every category overview must link each matching detail page exactly once, and primary navigation cannot link back to homepage fragments. A missing route, asset or anchor fails the build. The output includes `sitemap.xml`, `robots.txt` and a helpful `404.html`.
 
 Serve `dist/` as the root of any static web server. For example, if Python 3 is available:
 
@@ -25,13 +27,14 @@ Then open `http://localhost:4173/`. Opening source files directly with `file://`
 
 - `index.html` contains the homepage and the shared header/footer.
 - `content.js` contains the original detail-page copy, structured by route slug.
+- `hub-content.js` contains the four overview introductions and directory cards.
 - `styles.css` and `script.js` provide the shared responsive design and interactions.
 - `assets/` contains the photographs and favicon served locally with the website.
 - `ASSET_CREDITS.md` records the photograph source references.
 - `build.mjs` generates complete static pages and validates the output.
 - `vercel.json` tells Vercel to run the build and serve `dist/`.
 
-The generator extracts the homepage header and footer for consistent navigation on every page. Content data and build files are not copied into the public output. Generated files in `dist/` are ignored by Git; edit the source files and rebuild.
+The generator extracts the homepage header and footer for consistent navigation on every page, the contact section for the standalone project-brief page, and the technology strip for the services overview. Current-page navigation is marked in generated HTML. Content data and build files are not copied into the public output. Generated files in `dist/` are ignored by Git; edit the source files and rebuild.
 
 ## Hosting and metadata
 
